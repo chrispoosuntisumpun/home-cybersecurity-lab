@@ -1,0 +1,26 @@
+title: 'Failed Logon Attempt Detected'
+id: 7d8f3a1e-4b2c-4e9a-9f1d-2a3b4c5d6e7f
+status: 'experimental'
+description: |
+    Detects a failed logon attempt (Event ID 4625) which may indicate an
+    incorrect password or an attempted brute-force attack against a
+    Windows account.
+author: '@user'
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource:
+  category: authentication
+  product: windows
+detection:
+    selection:
+        EventID: 4625
+    condition: selection
+level: 'medium'
+
+# NOTE: An initial version used `condition: selection | count() by IpAddress > 3`
+# to require multiple failures from one source before alerting. Security Onion's
+# Sigma-to-EQL converter did not support this aggregation syntax (HTTP 500 on
+# conversion) and it was replaced with the simple single-event version above.
+# A proper threshold-based version of this rule would be implemented via
+# ElastAlert rather than Sigma.
