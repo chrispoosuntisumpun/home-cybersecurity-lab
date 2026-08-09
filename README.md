@@ -17,7 +17,7 @@
 
 ## 📌 Overview
 
-This repo documents a three-node home cybersecurity lab built from scratch on personal hardware to gain hands-on, resume-relevant experience with **SIEM administration, Active Directory, endpoint telemetry, attack simulation, and detection engineering**.
+This repo documents a three-node home cybersecurity lab built from scratch on personal hardware to gain hands-on experience with **SIEM administration, Active Directory, endpoint telemetry, attack simulation, and detection engineering**.
 
 The lab runs a bare-metal **Proxmox** hypervisor hosting **Security Onion** (Suricata, Zeek, Elastic Stack), a **VirtualBox**-based Active Directory environment (Domain Controller + domain-joined Windows client, both instrumented with Sysmon and Elastic Agent), and a **Kali Linux** attacker machine. Building it surfaced a long list of real infrastructure problems — networking, firewall rules, certificate trust, DNS, Windows logging gaps — all diagnosed and documented below. The environment was then used to simulate real attack techniques and validate detection coverage, culminating in three custom Sigma rules.
 
@@ -42,15 +42,15 @@ The lab runs a bare-metal **Proxmox** hypervisor hosting **Security Onion** (Sur
 - **Security Onion monitor interface** (`ens19`) — deliberately unconnected to anything external; sniffs traffic on Proxmox's own virtual switch only.
 
 ```
-+------------------+   +----------------------------------+   +----------------+
-|     Laptop 2     |   |             Laptop 1              |   |    Laptop 3    |
-|   Proxmox VE     |   |            VirtualBox             |   |   VirtualBox   |
-|                  |   |                                    |   |                |
++------------------+   +-------------------------------------+   +----------------+
+|     Laptop 2     |   |             Laptop 1                |   |    Laptop 3    |
+|   Proxmox VE     |   |            VirtualBox               |   |   VirtualBox   |
+|                  |   |                                     |   |                |
 |  Security Onion  |   |   DC1 <---10.10.10.0/24---> WIN11   |   |      Kali      |
 |  192.168.123.226 |   |  (AD, DNS)         (domain client)  |   |   (attacker)   |
-+--------+---------+   +---------------+--------------------+   +-------+--------+
-         |                             |                                |
-         +-----------------------------+--------------------------------+
++--------+---------+   +---------------+---------------------+   +-------+--------+
+         |                             |                                 |
+         +-----------------------------+---------------------------------+
                               Home network (bridged)
                               192.168.123.0/24
 ```
@@ -128,7 +128,7 @@ description: |
     Detects a failed logon attempt (Event ID 4625) which may indicate an
     incorrect password or an attempted brute-force attack against a
     Windows account.
-author: '@user'
+author: 'Chris'
 tags:
   - attack.credential_access
   - attack.t1110
@@ -158,7 +158,7 @@ description: |
     tool used to extract passwords, hashes, and Kerberos tickets from
     memory. Execution of this tool is a strong indicator of credential
     access activity and is rarely, if ever, legitimate.
-author: '@user'
+author: 'Chris'
 tags:
   - attack.credential_access
   - attack.t1003
@@ -186,7 +186,7 @@ description: |
     shorthand -enc/-e) parameter, commonly used by attackers to
     obfuscate malicious commands and evade simple text-based
     detection. Legitimate administrative use of this flag is uncommon.
-author: '@user'
+author: 'Chris'
 tags:
   - attack.execution
   - attack.t1059.001
@@ -213,9 +213,7 @@ level: 'high'
 
 ## ⚠️ Known Limitations
 
-- **Network visibility gap:** Suricata/Zeek can't see traffic between other bridged devices (e.g., Kali → DC1). Proxmox connects to the home network over Wi-Fi, so that traffic never crosses Proxmox's own virtual switch and can't be mirrored to the monitor interface. Wired switches share this limitation without a SPAN/mirror port.
-- The Security Onion nginx artifact directory (`/opt/socore/html`) was never created by this install; the Fleet-provided one-line agent download fails as a result. Manual download from Elastic's site is the permanent workaround.
-- Suricata shows a persistent "rule mismatch" status. The documented cause (Elasticsearch disk watermark) was checked and ruled out — not pursued further since it doesn't affect any currently-used detection path.
+- **Network visibility gap:** Suricata/Zeek have no visibility into traffic between other bridged devices (e.g. Kali → DC1), since Proxmox connects to the home network over Wi-Fi and that traffic never crosses Proxmox's own virtual switch. Host-based telemetry (Sysmon, Windows Event Logs) is the primary detection layer in this lab as a result.
 - Sysmon (default SwiftOnSecurity config) didn't log the Nmap scan or initial SMB connection as Event ID 3 — the config is tuned toward outbound/anomalous connections rather than every inbound connection to a standard service.
 
 ---
@@ -226,12 +224,11 @@ level: 'high'
 - Logging isn't "on" by default — PowerShell Script Block Logging had to be explicitly enabled before encoded commands became visible, mirroring a common real-world enterprise gap.
 - Being on the same subnet doesn't mean a monitoring tool can see all traffic on it — genuine visibility requires sitting in the actual physical/virtual path the traffic flows through.
 - Splitting a lab across multiple hypervisors on separate machines is beginner-friendly and resource-flexible, but trades away easy network-level visibility.
-- Detection rule syntax support varies by platform — valid Sigma logic still needs to be checked against what the specific backend actually supports.
 
 ---
 
 <div align="center">
 
-Built and documented by **Chris Poosuntisumpun** — [LinkedIn](https://www.linkedin.com/in/chrispoosuntisumpun) · [chris.poosuntisumpun@gmail.com](mailto:chris.poosuntisumpun@gmail.com)
+Built and documented by **Chris Poosuntisumpun**
 
 </div>
