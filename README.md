@@ -25,6 +25,15 @@ The lab runs a bare-metal **Proxmox** hypervisor hosting **Security Onion** (Sur
 
 > 📄 Full build log, architecture detail, and portfolio writeup: [`Home_Lab_Documentation.pdf`](./Home_Lab_Documentation.pdf)
 
+**Repo structure**
+```
+home-cybersecurity-lab/
+├── README.md
+├── sigma-rules/     → validated detection rules (.yml)
+├── screenshots/     → dashboard, alert, and telemetry evidence
+└── configs/         → sanitized config snippets (Sysmon, Fleet, etc.)
+```
+
 ---
 
 ## 🗺️ Architecture
@@ -41,18 +50,25 @@ The lab runs a bare-metal **Proxmox** hypervisor hosting **Security Onion** (Sur
 - **Internal AD network** (`10.10.10.0/24`, VirtualBox internal switch) — isolated segment used only by DC1 and WIN11 for domain authentication.
 - **Security Onion monitor interface** (`ens19`) — deliberately unconnected to anything external; sniffs traffic on Proxmox's own virtual switch only.
 
-```
-+------------------+   +-------------------------------------+   +----------------+
-|     Laptop 2     |   |             Laptop 1                |   |    Laptop 3    |
-|   Proxmox VE     |   |            VirtualBox               |   |   VirtualBox   |
-|                  |   |                                     |   |                |
-|  Security Onion  |   |   DC1 <---10.10.10.0/24---> WIN11   |   |      Kali      |
-|  192.168.123.226 |   |  (AD, DNS)         (domain client)  |   |   (attacker)   |
-+--------+---------+   +---------------+---------------------+   +-------+--------+
-         |                             |                                 |
-         +-----------------------------+---------------------------------+
-                              Home network (bridged)
-                              192.168.123.0/24
+```mermaid
+graph TB
+    subgraph L2["Laptop 2 — Proxmox VE"]
+        SO["Security Onion<br/>192.168.123.226<br/>Suricata · Zeek · Elastic Stack"]
+    end
+ 
+    subgraph L1["Laptop 1 — VirtualBox"]
+        DC1["DC1<br/>Domain Controller / DNS<br/>10.10.10.10"]
+        WIN11["WIN11<br/>Domain Client<br/>10.10.10.20"]
+        DC1 <-->|"Internal AD network<br/>10.10.10.0/24"| WIN11
+    end
+ 
+    subgraph L3["Laptop 3 — VirtualBox"]
+        KALI["Kali Linux<br/>Attacker<br/>192.168.123.247"]
+    end
+ 
+    L2 <-->|"Home network (bridged)<br/>192.168.123.0/24"| L1
+    L2 <--> L3
+    L1 <--> L3
 ```
 
 ---
@@ -115,99 +131,13 @@ Each scenario was executed from Kali or on the target Windows host, then confirm
 
 ## 🛡️ Custom Detection Rules (Sigma)
 
-Three Sigma rules were authored, converted to EQL, enabled, and validated against live attack traffic.
-
-<details>
-<summary><strong>6.1 — Failed Logon Attempt Detected</strong> (T1110)</summary>
-
-```yaml
-title: 'Failed Logon Attempt Detected'
-id: 7d8f3a1e-4b2c-4e9a-9f1d-2a3b4c5d6e7f
-status: 'experimental'
-description: |
-    Detects a failed logon attempt (Event ID 4625) which may indicate an
-    incorrect password or an attempted brute-force attack against a
-    Windows account.
-author: 'Chris'
-tags:
-  - attack.credential_access
-  - attack.t1110
-logsource:
-  category: authentication
-  product: windows
-detection:
-    selection:
-        EventID: 4625
-    condition: selection
-level: 'medium'
-```
-
-> **Note:** An initial version used `count() by IpAddress > 3` to require multiple failures from one source before alerting. Security Onion's Sigma-to-EQL converter didn't support that aggregation syntax (HTTP 500 on conversion), so it was replaced with the single-event version above. A proper threshold-based version would be implemented via ElastAlert.
-
-</details>
-
-<details>
-<summary><strong>6.2 — Mimikatz Process Execution Detected</strong> (T1003)</summary>
-
-```yaml
-title: 'Mimikatz Process Execution Detected'
-id: 3f4a5b6c-7d8e-4f9a-b0c1-d2e3f4a5b6c7
-status: 'experimental'
-description: |
-    Detects execution of mimikatz.exe, a well-known credential dumping
-    tool used to extract passwords, hashes, and Kerberos tickets from
-    memory. Execution of this tool is a strong indicator of credential
-    access activity and is rarely, if ever, legitimate.
-author: 'Chris'
-tags:
-  - attack.credential_access
-  - attack.t1003
-logsource:
-  category: process_creation
-  product: windows
-detection:
-    selection:
-        Image|endswith: '\\mimikatz.exe'
-    condition: selection
-level: 'high'
-```
-
-</details>
-
-<details>
-<summary><strong>6.3 — Encoded PowerShell Command Execution</strong> (T1059.001 / T1027)</summary>
-
-```yaml
-title: 'Encoded PowerShell Command Execution'
-id: 8a9b0c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d
-status: 'experimental'
-description: |
-    Detects execution of PowerShell with the -EncodedCommand (or
-    shorthand -enc/-e) parameter, commonly used by attackers to
-    obfuscate malicious commands and evade simple text-based
-    detection. Legitimate administrative use of this flag is uncommon.
-author: 'Chris'
-tags:
-  - attack.execution
-  - attack.t1059.001
-  - attack.defense_evasion
-  - attack.t1027
-logsource:
-  category: process_creation
-  product: windows
-detection:
-    selection_img:
-        - Image|endswith: '\\powershell.exe'
-        - OriginalFileName: 'PowerShell.EXE'
-    selection_cli:
-        CommandLine|contains|windash:
-            - ' -enc'
-            - ' -EncodedCommand'
-    condition: all of selection_*
-level: 'high'
-```
-
-</details>
+Three Sigma rules were authored, converted to EQL, enabled, and validated against live attack traffic. Full rule source lives in [`/sigma-rules`](./sigma-rules) — summaries below.
+ 
+| Rule | Detects | ATT&CK | Level | Source |
+|---|---|---|---|---|
+| Failed Logon Attempt Detected | Windows Event ID 4625 (failed logon) — signal for brute-force / password-guessing activity. | T1110 | Medium | [`failed-logon-detected.yml`](./sigma-rules/failed-logon-detected.yml) |
+| Mimikatz Process Execution Detected | Process creation matching `mimikatz.exe` by filename — a strong, rarely-legitimate indicator of credential dumping. | T1003 | High | [`mimikatz-execution.yml`](./sigma-rules/mimikatz-execution.yml) |
+| Encoded PowerShell Command Execution | PowerShell invoked with `-EncodedCommand`/`-enc`, commonly used to obfuscate malicious commands. Only became visible in testing after enabling Script Block Logging (see Troubleshooting Journal). | T1059.001 / T1027 | High | [`encoded-powershell.yml`](./sigma-rules/encoded-powershell.yml) |
 
 ---
 
