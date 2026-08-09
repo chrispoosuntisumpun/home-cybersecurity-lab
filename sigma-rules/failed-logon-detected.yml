@@ -20,7 +20,7 @@ level: 'medium'
 
 # NOTE: An initial version used `condition: selection | count() by IpAddress > 3`
 # to require multiple failures from one source before alerting. Security Onion's
-# Sigma-to-EQL converter did not support this aggregation syntax (HTTP 500 on
-# conversion) and it was replaced with the simple single-event version above.
+# Sigma-to-EQL converter did not support this aggregation syntax 
+# and it was replaced with the simple single-event version above.
 # A proper threshold-based version of this rule would be implemented via
 # ElastAlert rather than Sigma.
