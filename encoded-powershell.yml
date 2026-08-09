@@ -1,0 +1,27 @@
+title: 'Encoded PowerShell Command Execution'
+id: 8a9b0c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d
+status: 'experimental'
+description: |
+    Detects execution of PowerShell with the -EncodedCommand (or
+    shorthand -enc/-e) parameter, commonly used by attackers to
+    obfuscate malicious commands and evade simple text-based
+    detection. Legitimate administrative use of this flag is uncommon.
+author: '@user'
+tags:
+  - attack.execution
+  - attack.t1059.001
+  - attack.defense_evasion
+  - attack.t1027
+logsource:
+  category: process_creation
+  product: windows
+detection:
+    selection_img:
+        - Image|endswith: '\\powershell.exe'
+        - OriginalFileName: 'PowerShell.EXE'
+    selection_cli:
+        CommandLine|contains|windash:
+            - ' -enc'
+            - ' -EncodedCommand'
+    condition: all of selection_*
+level: 'high'
